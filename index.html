@@ -178,8 +178,8 @@
 <!-- Replace this with your actual Gist raw URL -->
 <!-- Format: https://gist.githubusercontent.com/USERNAME/GIST_ID/raw/trading_status.json -->
 <script>
-  const GIST_URL = "https://gist.githubusercontent.com/tarzen77z-star/1f9a99ffa1b13c1386b9483180a55ea4/raw/64d464e3c3dc1b7a64983c12a528931210ebbbb9/trading_status.json";
-  // e.g. "https://gist.githubusercontent.com/tarzen77z-star/1f9a99ffa1b13c1386b9483180a55ea4/raw/64d464e3c3dc1b7a64983c12a528931210ebbbb9/trading_status.json"
+  const GIST_URL = "https://api.github.com/gists/1f9a99ffa1b13c1386b9483180a55ea4";
+  // e.g. "https://gist.githubusercontent.com/tarze/abc123/raw/trading_status.json"
 </script>
 
 <!-- Top bar -->
@@ -367,11 +367,15 @@ function render(data) {
 
 async function fetchData() {
   try {
-    // Add cache-bust to always get fresh Gist content
-    const url = GIST_URL + "?t=" + Date.now();
-    const res = await fetch(url);
+    const res = await fetch(GIST_URL, {
+      headers: { "Accept": "application/vnd.github.v3+json" }
+    });
     if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
+    const gist = await res.json();
+    // GitHub API returns file content nested under files
+    const content = gist.files?.["trading_status.json"]?.content;
+    if (!content) throw new Error("trading_status.json not found in gist");
+    const data = JSON.parse(content);
     render(data);
   } catch(e) {
     document.getElementById("updatedAt").textContent = "⚠ " + e.message;
