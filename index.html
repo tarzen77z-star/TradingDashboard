@@ -217,7 +217,7 @@
   </div>
 
   <div class="footer">
-    Data from GitHub Gist — updated every 5 min by monitor_agent.py
+    Data from GitHub Gist — updated every 1 min by monitor_agent.py
     &nbsp;·&nbsp; <span id="footerTime">—</span>
   </div>
 
@@ -384,7 +384,7 @@ async function fetchData() {
 }
 
 fetchData();
-setInterval(fetchData, 30000);  // refresh every 30s (Gist only updates every 5 min anyway)
+setInterval(fetchData, 60000);  // refresh every 60s — matches monitor_agent push interval
 </script>
 </body>
 </html>
