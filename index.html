@@ -211,6 +211,11 @@
     <div style="color:var(--dim);font-family:var(--mono);font-size:12px;padding:20px">Loading...</div>
   </div>
 
+  <div class="sec-label">TODAY'S TRADES</div>
+  <div class="tbl-wrap" id="tradesFeed">
+    <div class="empty">No trades today</div>
+  </div>
+
   <div class="sec-label">OPEN POSITIONS</div>
   <div class="tbl-wrap" id="posWrap">
     <div class="empty">No open positions</div>
@@ -258,6 +263,61 @@ function staleMins(updated_at) {
     const d = new Date(s);
     return (Date.now() - d.getTime()) / 60000;
   } catch { return 999; }
+}
+
+function renderTrades(strategies) {
+  const feed = document.getElementById("tradesFeed");
+  const ACTION_COLORS = {
+    "BUY LONG":     {bg:"rgba(46,204,113,0.12)", color:"#2ecc71", icon:"▲"},
+    "SELL LONG":    {bg:"rgba(255,77,77,0.12)",  color:"#ff4d4d", icon:"▼"},
+    "SHORT":        {bg:"rgba(255,140,66,0.12)", color:"#ff8c42", icon:"▽"},
+    "COVER":        {bg:"rgba(0,212,240,0.12)",  color:"#00d4f0", icon:"△"},
+    "BUY CALL":     {bg:"rgba(176,144,255,0.12)",color:"#b090ff", icon:"C▲"},
+    "SELL CALL":    {bg:"rgba(176,144,255,0.12)",color:"#b090ff", icon:"C▼"},
+    "BUY PUT":      {bg:"rgba(255,140,66,0.12)", color:"#ff8c42", icon:"P▲"},
+    "SELL PUT":     {bg:"rgba(255,140,66,0.12)", color:"#ff8c42", icon:"P▼"},
+    "PROFIT HIT":   {bg:"rgba(46,204,113,0.2)",  color:"#2ecc71", icon:"★"},
+    "CROSSOVER UP": {bg:"rgba(46,204,113,0.08)", color:"#2ecc71", icon:"↑"},
+    "CROSSOVER DOWN":{bg:"rgba(255,77,77,0.08)", color:"#ff4d4d", icon:"↓"},
+  };
+
+  // Collect all trades across strategies, sort by time desc
+  const all = [];
+  for (const [key, d] of Object.entries(strategies)) {
+    const meta = STRAT_META[key] || {ticker: key};
+    for (const t of (d.trades_today || [])) {
+      all.push({...t, ticker: meta.ticker});
+    }
+  }
+  all.sort((a,b) => b.time.localeCompare(a.time));
+
+  if (!all.length) {
+    feed.innerHTML = `<div class="empty">No trades today</div>`;
+    return;
+  }
+
+  feed.innerHTML = `<table>
+    <tr>
+      <th>Time</th><th>Ticker</th><th>Action</th><th>Price</th><th>P&L</th><th>Detail</th>
+    </tr>
+    ${all.map(t => {
+      const ac = ACTION_COLORS[t.action] || {bg:"transparent",color:"var(--dim)",icon:"·"};
+      const pnlNum = t.pnl ? parseFloat(t.pnl.replace(/[^0-9.-]/g,"")) : null;
+      const pnlColor = pnlNum == null ? "var(--dim)" : pnlNum >= 0 ? "var(--green)" : "var(--red)";
+      return `<tr>
+        <td style="color:var(--dim)">${t.time}</td>
+        <td style="color:var(--cyan);font-weight:700">${t.ticker}</td>
+        <td>
+          <span style="background:${ac.bg};color:${ac.color};padding:2px 8px;border-radius:3px;font-size:11px;font-weight:700;font-family:var(--mono)">
+            ${ac.icon} ${t.action}
+          </span>
+        </td>
+        <td style="color:var(--text)">${t.price ? "$"+t.price : "—"}</td>
+        <td style="color:${pnlColor};font-weight:${pnlNum!=null?"700":"400"}">${t.pnl || "—"}</td>
+        <td style="color:var(--dim);font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.detail}</td>
+      </tr>`;
+    }).join("")}
+  </table>`;
 }
 
 function render(data) {
@@ -345,6 +405,9 @@ function render(data) {
       </div>
     </div>`;
   }).join("");
+
+  // Trades feed
+  renderTrades(data.strategies || {});
 
   // Positions table
   const pos = data.positions || {};
