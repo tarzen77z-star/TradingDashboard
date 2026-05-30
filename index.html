@@ -237,6 +237,7 @@ const STRAT_META = {
   combo_amd:                 {name:"AMD Combo",     ticker:"AMD"},
   combo_nvda:                {name:"NVDA Multi-MA", ticker:"NVDA"},
   macd_msft:                 {name:"MSFT MACD",     ticker:"MSFT"},
+  spread_amzn:               {name:"AMZN Spread",    ticker:"AMZN"},
 };
 
 function fmt$(v) {
@@ -281,6 +282,7 @@ function renderTrades(strategies) {
     "CROSSOVER DOWN":{bg:"rgba(255,77,77,0.08)",   color:"#ff4d4d", icon:"↓"},
   };
 
+  // Collect all trades
   const all = [];
   for (const [key, d] of Object.entries(strategies)) {
     const meta = STRAT_META[key] || {ticker: key};
@@ -288,45 +290,101 @@ function renderTrades(strategies) {
       all.push({...t, ticker: meta.ticker});
     }
   }
-  all.sort((a,b) => b.time.localeCompare(a.time));
 
   if (!all.length) {
     feed.innerHTML = `<div class="empty">No trades today</div>`;
     return;
   }
 
-  feed.innerHTML = `<table>
-    <tr>
-      <th>Time</th><th>Ticker</th><th>Action</th><th>Entry</th><th>Exit</th><th>P&L</th>
-    </tr>
-    ${all.map(t => {
-      const ac = ACTION_COLORS[t.action] || {bg:"transparent", color:"var(--dim)", icon:"·"};
-      const pnlNum = t.pnl ? parseFloat(t.pnl.replace(/[^0-9.-]/g,"")) : null;
-      const pnlColor = pnlNum == null ? "var(--dim)" : pnlNum >= 0 ? "var(--green)" : "var(--red)";
-      const isExit = t.is_exit;
-      const entryCell = t.entry_price
-        ? `<span style="color:var(--green);font-family:var(--mono)">$${t.entry_price}</span>`
-        : !isExit
-          ? `<span style="color:var(--green);font-family:var(--mono)">${t.price?"$"+t.price:"—"}</span>`
-          : `<span style="color:var(--dim)">—</span>`;
-      const exitCell = isExit && t.exit_price
-        ? `<span style="color:var(--red);font-family:var(--mono)">$${t.exit_price}</span>`
-        : !isExit
-          ? `<span style="color:var(--dim);font-size:10px">open</span>`
-          : `<span style="color:var(--dim)">—</span>`;
-      const pnlCell = pnlNum != null
-        ? `<span style="color:${pnlColor};font-weight:700;font-family:var(--mono)">${pnlNum>=0?"+":""}${t.pnl}</span>`
+  // Group by ticker, preserve time order within each group
+  const groups = {};
+  const groupOrder = [];
+  for (const t of all) {
+    if (!groups[t.ticker]) {
+      groups[t.ticker] = [];
+      groupOrder.push(t.ticker);
+    }
+    groups[t.ticker].push(t);
+  }
+  // Sort each group newest first
+  for (const ticker of groupOrder) {
+    groups[ticker].sort((a,b) => b.time.localeCompare(a.time));
+  }
+  // Sort group order by latest trade time
+  groupOrder.sort((a,b) => {
+    const aTime = groups[a][0]?.time || "";
+    const bTime = groups[b][0]?.time || "";
+    return bTime.localeCompare(aTime);
+  });
+
+  function tradeRow(t) {
+    const ac = ACTION_COLORS[t.action] || {bg:"transparent", color:"var(--dim)", icon:"·"};
+    const pnlNum = t.pnl ? parseFloat(t.pnl.replace(/[^0-9.-]/g,"")) : null;
+    const pnlColor = pnlNum == null ? "var(--dim)" : pnlNum >= 0 ? "var(--green)" : "var(--red)";
+    const isExit = t.is_exit;
+    const entryCell = t.entry_price
+      ? `<span style="color:var(--green);font-family:var(--mono)">$${t.entry_price}</span>`
+      : !isExit
+        ? `<span style="color:var(--green);font-family:var(--mono)">${t.price?"$"+t.price:"—"}</span>`
         : `<span style="color:var(--dim)">—</span>`;
-      return `<tr style="${isExit?"":"opacity:0.65"}">
-        <td style="color:var(--dim);font-family:var(--mono);font-size:11px">${t.time}</td>
-        <td style="color:var(--cyan);font-weight:700">${t.ticker}</td>
-        <td><span style="background:${ac.bg};color:${ac.color};padding:2px 8px;border-radius:3px;font-size:11px;font-weight:700;font-family:var(--mono)">${ac.icon} ${t.action}</span></td>
-        <td>${entryCell}</td>
-        <td>${exitCell}</td>
-        <td>${pnlCell}</td>
-      </tr>`;
-    }).join("")}
-  </table>`;
+    const exitCell = isExit && t.exit_price
+      ? `<span style="color:var(--red);font-family:var(--mono)">$${t.exit_price}</span>`
+      : !isExit
+        ? `<span style="color:var(--dim);font-size:10px">open</span>`
+        : `<span style="color:var(--dim)">—</span>`;
+    const pnlCell = pnlNum != null
+      ? `<span style="color:${pnlColor};font-weight:700;font-family:var(--mono)">${pnlNum>=0?"+":""}${t.pnl}</span>`
+      : `<span style="color:var(--dim)">—</span>`;
+    return `<tr style="${isExit?"":"opacity:0.65"}">
+      <td style="color:var(--dim);font-family:var(--mono);font-size:11px;padding-left:24px">${t.time}</td>
+      <td><span style="background:${ac.bg};color:${ac.color};padding:2px 8px;border-radius:3px;font-size:11px;font-weight:700;font-family:var(--mono)">${ac.icon} ${t.action}</span></td>
+      <td>${entryCell}</td>
+      <td>${exitCell}</td>
+      <td>${pnlCell}</td>
+    </tr>`;
+  }
+
+  let html = `<table>
+    <tr>
+      <th style="padding-left:24px">Time</th>
+      <th>Action</th>
+      <th>Entry</th>
+      <th>Exit</th>
+      <th>P&L</th>
+    </tr>`;
+
+  for (const ticker of groupOrder) {
+    const trades = groups[ticker];
+    // Calculate total P&L for this ticker
+    let totalPnl = 0;
+    let hasPnl = false;
+    for (const t of trades) {
+      if (t.pnl) {
+        const n = parseFloat(t.pnl.replace(/[^0-9.-]/g,""));
+        if (!isNaN(n)) { totalPnl += n; hasPnl = true; }
+      }
+    }
+    const pnlStr  = hasPnl ? `${totalPnl>=0?"+":""}$${Math.abs(totalPnl).toFixed(2)}` : "";
+    const pnlCol  = totalPnl >= 0 ? "var(--green)" : "var(--red)";
+    const tradeCount = trades.length;
+
+    // Ticker header row
+    html += `<tr style="background:rgba(0,200,232,0.05);border-top:1px solid var(--border)">
+      <td colspan="4" style="padding:6px 12px">
+        <span style="color:var(--cyan);font-weight:900;font-family:var(--mono);font-size:13px">${ticker}</span>
+        <span style="color:var(--dim);font-size:10px;margin-left:8px">${tradeCount} trade${tradeCount!==1?"s":""}</span>
+      </td>
+      <td style="padding:6px 12px;text-align:right">
+        ${hasPnl ? `<span style="color:${pnlCol};font-family:var(--mono);font-weight:700;font-size:12px">${pnlStr}</span>` : ""}
+      </td>
+    </tr>`;
+
+    // Trade rows
+    html += trades.map(tradeRow).join("");
+  }
+
+  html += `</table>`;
+  feed.innerHTML = html;
 }
 
 function render(data) {
