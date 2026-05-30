@@ -266,7 +266,7 @@ function staleMins(updated_at) {
   } catch { return 999; }
 }
 
-function renderTrades(strategies) {
+function renderTrades(strategies, alpacaTrades) {
   const feed = document.getElementById("tradesFeed");
   const ACTION_COLORS = {
     "BUY LONG":      {bg:"rgba(46,204,113,0.12)",  color:"#2ecc71", icon:"▲"},
@@ -282,12 +282,17 @@ function renderTrades(strategies) {
     "CROSSOVER DOWN":{bg:"rgba(255,77,77,0.08)",   color:"#ff4d4d", icon:"↓"},
   };
 
-  // Collect all trades
-  const all = [];
-  for (const [key, d] of Object.entries(strategies)) {
-    const meta = STRAT_META[key] || {ticker: key};
-    for (const t of (d.trades_today || [])) {
-      all.push({...t, ticker: meta.ticker});
+  // Use Alpaca order history if available (authoritative), else fall back to log parsing
+  let all = [];
+  if (alpacaTrades && alpacaTrades.length > 0) {
+    all = alpacaTrades;
+  } else {
+    // Fall back to log-parsed trades
+    for (const [key, d] of Object.entries(strategies)) {
+      const meta = STRAT_META[key] || {ticker: key};
+      for (const t of (d.trades_today || [])) {
+        all.push({...t, ticker: meta.ticker});
+      }
     }
   }
 
@@ -474,7 +479,7 @@ function render(data) {
   }).join("");
 
   // Trades feed
-  renderTrades(data.strategies || {});
+  renderTrades(data.strategies || {}, data.alpaca_trades || []);
 
   // Positions table
   const pos = data.positions || {};
